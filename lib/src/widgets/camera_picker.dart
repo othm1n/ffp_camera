@@ -28,6 +28,9 @@ import 'camera_picker_page_route.dart';
 import 'camera_picker_viewer.dart';
 import 'exposure_point_widget.dart';
 
+import 'package:sympanuxproject/pages/uploud/editvideo_screen.dart';
+import 'package:wechat_assets_picker/wechat_assets_picker.dart';
+
 const Color _lockedColor = Colors.amber;
 const Duration _kDuration = Duration(milliseconds: 300);
 
@@ -250,6 +253,7 @@ class CameraPickerState extends State<CameraPicker>
   @override
   void initState() {
     super.initState();
+    _fetchAssets();
     useWidgetsBinding().addObserver(this);
 
     // TODO(Alex): Currently hide status bar will cause the viewport shaking on Android.
@@ -1001,7 +1005,11 @@ class CameraPickerState extends State<CameraPicker>
       child: Row(
         children: <Widget>[
           if (controller?.value.isRecordingVideo != true)
-            Expanded(child: backButton(context, constraints))
+            Expanded(
+              child: Center(
+                child: backButton(context, constraints),
+              ),
+            )
           else
             const Spacer(),
           Expanded(
@@ -1015,23 +1023,72 @@ class CameraPickerState extends State<CameraPicker>
     );
   }
 
+  late File? _video;
+  late File? _lastVideo = null;
+  List<AssetEntity> assets = [];
+
   /// The back button near to the [shootingButton].
   /// 靠近拍照键的返回键
   Widget backButton(BuildContext context, BoxConstraints constraints) {
-    return IconButton(
-      onPressed: Navigator.of(context).pop,
-      tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-      icon: Container(
-        alignment: Alignment.center,
-        width: 27,
-        height: 27,
+    return InkWell(
+      onTap: () {
+        _pickVideo(context);
+      },
+      child: Container(
+        margin: const EdgeInsets.all(10.0),
+        width: 55,
+        height: 55,
         decoration: const BoxDecoration(
           color: Colors.white,
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.keyboard_arrow_down, color: Colors.black),
+        child: _lastVideo != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: Image.file(
+                  File(_lastVideo!.path),
+                  fit: BoxFit.cover,
+                ),
+              )
+            : Container(),
       ),
     );
+  }
+
+  _fetchAssets() async {
+    final albums = await PhotoManager.getAssetPathList(type: RequestType.image);
+    final recentAlbum = albums.first;
+    final recentAssets = await recentAlbum.getAssetListRange(
+      start: 0, // start at index 0
+      end: 1, // end at a very big index (to get all the assets)
+    );
+    setState(() => assets = recentAssets);
+    _lastVideo = await assets[0].file;
+  }
+
+  _pickVideo(BuildContext context) async {
+    final List<AssetEntity>? pickedFile = await AssetPicker.pickAssets(
+      context,
+      pickerConfig: AssetPickerConfig(
+        requestType: RequestType.video,
+        maxAssets: 1,
+        themeColor: Color.fromRGBO(29, 70, 107, 1),
+        textDelegate: EnglishAssetPickerTextDelegate(),
+      ),
+    );
+
+    if (pickedFile != null) {
+      final File? file = await pickedFile[0].file;
+      _video = File(file!.path);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (builder) => EditVideoScreen(
+            path: _video!.path,
+          ),
+        ),
+      );
+    }
   }
 
   /// The shooting button.
@@ -1085,7 +1142,7 @@ class CameraPickerState extends State<CameraPicker>
                   builder: (_, __) => CircularProgressBar(
                     duration: config.maximumRecordingDuration!,
                     outerRadius: outerSize.width,
-                    ringsColor: theme.indicatorColor,
+                    ringsColor: Colors.red,
                     ringsWidth: 2,
                   ),
                 ),
